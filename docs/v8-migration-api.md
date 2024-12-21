@@ -77,6 +77,98 @@ Check out the [v8-migration guide](v8-migration.md) for other user-level changes
     - For `node.parameters` in Babel 7, use `node.params` in Babel 8
     - For `node.typeAnnotation` in Babel 7, use `node.returnType` in Babel 8
 
+- Rename `typeParameters` to `typeArguments` for `TSTypeQuery` ([#16679](https://github.com/babel/babel/issues/16679), [#17012](https://github.com/babel/babel/pull/17012))
+
+  ```ts title=input.ts
+  var arr: typeof Array<string>;
+
+  // AST in Babel 7
+  {
+    type: "TSTypeQuery",
+    exprName: Identifier("Array"),
+    typeParameters: {
+      type: "TSTypeParameterInstantiation",
+      params: [{
+        type: "TSStringKeyword"
+      }]
+    }
+  }
+
+  // AST in Babel 8
+  {
+    type: "TSTypeReference",
+    exprName: Identifier("Array"),
+    typeArguments: {
+      type: "TSTypeParameterInstantiation",
+      params: [{
+        type: "TSStringKeyword"
+      }]
+    }
+  }
+  ```
+
+- Rename `typeParameters` to `typeArguments` for `TSTypeReference` ([#16679](https://github.com/babel/babel/issues/16679), [#17008](https://github.com/babel/babel/pull/17008))
+
+  ```ts title=input.ts
+  var arr: Array<string>;
+
+  // AST in Babel 7
+  {
+    type: "TSTypeReference",
+    typeName: Identifier("Array"),
+    typeParameters: {
+      type: "TSTypeParameterInstantiation",
+      params: [{
+        type: "TSStringKeyword"
+      }]
+    }
+  }
+
+  // AST in Babel 8
+  {
+    type: "TSTypeReference",
+    typeName: Identifier("Array"),
+    typeArguments: {
+      type: "TSTypeParameterInstantiation",
+      params: [{
+        type: "TSStringKeyword"
+      }]
+    }
+  }
+  ```
+
+- Rename `superTypeParameters` to `superTypeArguments` for `ClassDeclaration` and `ClassExpression` ([#16679](https://github.com/babel/babel/issues/16679), [#16997](https://github.com/babel/babel/pull/16997))
+
+  ```ts title=input.ts
+  class X extends Y<string> {}
+
+  // AST in Babel 7
+  {
+    type: "ClassDeclaration",
+    id: Identifier("X"),
+    superClass: Identifier("Y"),
+    superTypeParameters: {
+      type: "TSTypeParameterInstantiation",
+      params: [{
+        type: "TSStringKeyword"
+      }]
+    }
+  }
+
+  // AST in Babel 8
+  {
+    type: "ClassDeclaration",
+    id: Identifier("X"),
+    superClass: Identifier("Y"),
+    superTypeArguments: {
+      type: "TSTypeParameterInstantiation",
+      params: [{
+        type: "TSStringKeyword"
+      }]
+    }
+  }
+  ```
+
 ![medium](https://img.shields.io/badge/risk%20of%20breakage%3F-medium-yellow.svg)
 
 - Split `typeParameter` of `TSMappedType` ([#16733](https://github.com/babel/babel/pull/16733)).
@@ -108,7 +200,76 @@ Check out the [v8-migration guide](v8-migration.md) for other user-level changes
   }
   ```
 
-  __Migration__: If you have a customized plugin accessing `typeParameter` of a `TSMappedType` node, use `node.key` and `node.constraint` in Babel 8.
+  __Migration__: If you have a customized plugin accessing `typeParameter` of a `TSMappedType` node:
+    - For `node.typeParameter.name` in Babel 7, use `node.key` in Babel 8
+    - For `node.typeParameter.constraint` in Babel 7, use `node.constraint` in Babel 8
+
+- Split `TSExpressionWithTypeArguments` into `TSClassImplements` and `TSInterfaceHeritage` ([#16731](https://github.com/babel/babel/pull/16731), and rename `typeParameters` to `typeArguments` ([#17017](https://github.com/babel/babel/pull/17017)).
+
+  The builder and validator for `TSExpressionWithTypeArguments` in `@babel/types` and `@babel/traverse` are also removed.
+  This is to align the AST for TS nodes with `@typescript-eslint`.
+
+  ```ts
+  // Example input
+  class C implements X<T> {}
+  interface I extends X<T> {}
+
+  // AST in Babel 7
+  {
+    type: "ClassDeclaration",
+    id: Identifier("C"),
+    implements: [
+      {
+        type: "TSExpressionWithTypeArguments",
+        expression: Identifier("X"),
+        typeParameters: { type: "TSTypeParameterInstantiation", params: [TSTypeReference(Identifier("T"))] }
+      }
+    ],
+    body: ClassBody([]),
+  }
+
+  {
+    type: "TSInterfaceDeclaration",
+    id: Identifier("I"),
+    extends: [
+      {
+        type: "TSExpressionWithTypeArguments",
+        expression: Identifier("X"),
+        typeParameters: { type: "TSTypeParameterInstantiation", params: [TSTypeReference(Identifier("T"))] }
+      }
+    ],
+    body: TSInterfaceBody([]),
+  }
+
+  // AST in Babel 8
+  {
+    type: "ClassDeclaration",
+    id: Identifier("C"),
+    implements: [
+      {
+        type: "TSClassImplements",
+        expression: Identifier("X"),
+        typeArguments: { type: "TSTypeParameterInstantiation", params: [TSTypeReference(Identifier("T"))] }
+      }
+    ],
+    body: ClassBody([]),
+  }
+
+  {
+    type: "TSInterfaceDeclaration",
+    id: Identifier("I"),
+    extends: [
+      {
+        type: "TSInterfaceHeritage",
+        expression: Identifier("X"),
+        typeArguments: { type: "TSTypeParameterInstantiation", params: [TSTypeReference(Identifier("T"))] }
+      }
+    ],
+    body: TSInterfaceBody([]),
+  }
+  ```
+
+  __Migration__: If you are using `TSExpressionWithTypeArguments`, replace it with `TSClassImplements` and `TSInterfaceHeritage` in Babel 8. If you are accessing `node.typeParameters`, use `node.typeArguments`.
 
 ![low](https://img.shields.io/badge/risk%20of%20breakage%3F-low-yellowgreen.svg)
 
@@ -128,6 +289,9 @@ Check out the [v8-migration guide](v8-migration.md) for other user-level changes
   ```
   When `createParenthesizedExpression` is `false`, you can also use `node.extra.parenthesized` to detect whether `node` is wrapped in parentheses.
 
+- Create `TSAbstractMethodDefinition` and `TSPropertyDefinition` when both `estree` and `typescript` parser plugins are enabled ([#16679](https://github.com/babel/babel/issues/16679), [#17014](https://github.com/babel/babel/pull/17014))
+
+  __Migration__: This breaking change is part of the efforts to libraries and ESLint plugins that can work both with `typescript-eslint` and `@babel/eslint-parser`. For most Babel plugin developers you can safely ignore this change as it does not affect the typescript transform and codemod. That said, if you are trying to develop a custom ESLint rule with `@babel/eslint-parser`, this change aligns the Babel AST to the `typescript-eslint` AST.
 
 ## API Changes
 
@@ -202,6 +366,49 @@ Check out the [v8-migration guide](v8-migration.md) for other user-level changes
         /* computed */ true
       ))
   }
+  ```
+
+- The third argument of `t.tsTypeParameter` requires an `Identifier` node ([#12829](https://github.com/babel/babel/pull/12829))
+
+  __Migration__: Wrap the `name` string within the `identifier` builder
+
+  ```diff title="my-babel-codemod.js"
+  t.tsTypeParameter(
+    /* constraint */ undefined,
+    /* default */ undefined,
+  + t.identifier(
+      name
+  + )
+  )
+  ```
+
+- The `t.tsMappedType` signature changed ([#16733](https://github.com/babel/babel/pull/16733))
+
+  ```ts
+  // Babel 7
+  declare function tsMappedType(typeParameter: TSTypeParameter, typeAnnotation?: TSType, nameType?: TSType): TSMappedType
+  // Babel 8
+  declare function tsMappedType(key: Identifier, constraint: TSType, nameType?: TSType, typeAnnotation?: TSType): TSMappedType
+  ```
+  __Migration__: See the example below.
+
+  ```ts title=my-babel-codemod.ts
+  // To create { [P in string as Q]: number }
+
+  // Babel 7
+  t.tsMappedType(
+    t.tsTypeParameter(t.tsStringKeyword(), undefined, "P"),
+    t.tsNumberKeyword(),
+    t.tsTypeReference(t.identifier("Q"))
+  )
+
+  // Babel 8
+  t.tsMappedType(
+    t.identifier("P"),
+    t.tsStringKeyword(),
+    t.tsTypeReference(t.identifier("Q")),
+    t.tsNumberKeyword()
+  )
   ```
 
 ![low](https://img.shields.io/badge/risk%20of%20breakage%3F-low-yellowgreen.svg)
